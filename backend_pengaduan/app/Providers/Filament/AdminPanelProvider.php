@@ -29,8 +29,16 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->login()
             ->authGuard('admin')
+            ->brandName('Admin Panel Pengaduan')
+            ->brandLogo(asset('images/logo-gunungkidul.png'))
+            ->brandLogoHeight('60px')
+            ->favicon(asset('images/logo-gunungkidul.png'))
             ->colors([
                 'primary' => Color::Green,
+                'danger' => Color::Red,
+                'info' => Color::Blue,
+                'success' => Color::Emerald,
+                'warning' => Color::Orange,
             ])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
@@ -54,6 +62,7 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
-            ]);
+            ])
+            ->darkMode(true);
     }
 }

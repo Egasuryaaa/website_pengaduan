@@ -14,8 +14,11 @@ class PengaduanController extends Controller
 {
     public function index(Request $request)
     {
+        $user = $request->user();
+        $userId = $user ? $user->getAttribute('id') : null;
+        
         $pengaduans = Pengaduan::with(['kategori', 'user'])
-            ->where('user_id', $request->user()->id)
+            ->where('user_id', $userId)
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -47,21 +50,19 @@ class PengaduanController extends Controller
             $fotoPath = $request->file('foto_bukti')->store('pengaduan', 'public');
         }
         
-        // Debug request data
-        \Log::info('Pengaduan Request Data:', [
-            'all' => $request->all(),
-            'has_file' => $request->hasFile('foto_bukti'),
-            'files' => $request->allFiles(),
-            'headers' => $request->headers->all(),
-        ]);
+        // Hapus debug log
+
+        $user = $request->user();
+        $userId = $user ? $user->getAttribute('id') : null;
+        $namaInstansi = $request->input('nama_instansi');
 
         $pengaduan = Pengaduan::create([
-            'judul' => 'Pengaduan dari ' . $request->nama_instansi,
-            'deskripsi' => $request->deskripsi,
-            'kategori_id' => $request->kategori_id,
-            'lokasi' => $request->nama_instansi,
+            'judul' => 'Pengaduan dari ' . $namaInstansi,
+            'deskripsi' => $request->input('deskripsi'),
+            'kategori_id' => $request->input('kategori_id'),
+            'lokasi' => $namaInstansi,
             'foto' => $fotoPath,
-            'user_id' => $request->user()->id,
+            'user_id' => $userId,
             'nomor_pengaduan' => $this->generateTicketNumber(),
             'status' => 'pending',
         ]);
@@ -82,9 +83,12 @@ class PengaduanController extends Controller
 
     public function show($id)
     {
+        $user = auth()->user();
+        $userId = $user ? $user->getAttribute('id') : null;
+        
         $pengaduan = Pengaduan::with(['kategori', 'user', 'statusHistories'])
             ->where('id', $id)
-            ->where('user_id', auth()->user()->id)
+            ->where('user_id', $userId)
             ->first();
 
         if (!$pengaduan) {
@@ -112,14 +116,14 @@ class PengaduanController extends Controller
 
     public function getStatistics(Request $request)
     {
-        $userId = $request->user()->id;
+        $user = $request->user();
+        $userId = $user ? $user->getAttribute('id') : null;
 
         $statistics = [
             'total' => Pengaduan::where('user_id', $userId)->count(),
             'pending' => Pengaduan::where('user_id', $userId)->where('status', 'pending')->count(),
             'proses' => Pengaduan::where('user_id', $userId)->where('status', 'proses')->count(),
             'selesai' => Pengaduan::where('user_id', $userId)->where('status', 'selesai')->count(),
-            'ditolak' => Pengaduan::where('user_id', $userId)->where('status', 'ditolak')->count(),
         ];
 
         return response()->json([

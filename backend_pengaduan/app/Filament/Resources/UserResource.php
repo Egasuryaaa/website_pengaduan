@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Hash;
 use App\Models\Admin;
 
+
 class UserResource extends Resource
 {
     protected static ?string $model = User::class;
@@ -27,10 +28,20 @@ class UserResource extends Resource
 
     protected static ?int $navigationSort = 2;
 
-    // Hanya super admin yang bisa mengakses user management
+    // Admin, super admin, dan staff bisa mengakses user management
     public static function canViewAny(): bool
     {
-        return auth()->user()?->role === 'super_admin';
+        $user = auth()->user();
+        $role = $user ? $user->getAttribute('role') : null;
+        return $role === 'super_admin' || $role === 'admin' || $role === 'staff';
+    }
+    
+    // Hanya super admin yang bisa menghapus user
+    public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        $user = auth()->user();
+        $role = $user ? $user->getAttribute('role') : null;
+        return $role === 'super_admin';
     }
 
     public static function form(Form $form): Form
@@ -53,6 +64,23 @@ class UserResource extends Resource
                 Forms\Components\TextInput::make('nama_instansi')
                     ->maxLength(255)
                     ->label('Nama Instansi'),
+                Forms\Components\TextInput::make('password')
+                    ->password()
+                    ->dehydrateStateUsing(fn (string $state): string => Hash::make($state))
+                    ->required(fn ($livewire) => $livewire instanceof Pages\CreateUser)
+                    ->maxLength(255)
+                    ->label('Password')
+                    ->hiddenOn('view'),
+                Forms\Components\TextInput::make('password_confirmation')
+                    ->password()
+                    ->required(fn ($livewire) => $livewire instanceof Pages\CreateUser)
+                    ->maxLength(255)
+                    ->dehydrated(false)
+                    ->label('Konfirmasi Password')
+                    ->hiddenOn(['view', 'edit']),
+                Forms\Components\Toggle::make('is_active')
+                    ->label('Aktif')
+                    ->default(true),
                 Forms\Components\DateTimePicker::make('email_verified_at')
                     ->label('Email Verified At'),
             ]);
@@ -78,6 +106,13 @@ class UserResource extends Resource
                     ->dateTime()
                     ->sortable()
                     ->label('Email Verified'),
+                Tables\Columns\IconColumn::make('is_active')
+                    ->boolean()
+                    ->label('Status Aktif')
+                    ->trueIcon('heroicon-o-check-circle')
+                    ->falseIcon('heroicon-o-x-circle')
+                    ->trueColor('success')
+                    ->falseColor('danger'),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
@@ -86,17 +121,47 @@ class UserResource extends Resource
             ])
             ->filters([
                 Tables\Filters\Filter::make('verified')
-                    ->query(fn (Builder $query): Builder => $query->whereNotNull('email_verified_at'))
+                    ->query(fn (Builder $query) => $query->whereNotNull('email_verified_at'))
                     ->label('Verified Users'),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\Action::make('toggle_active')
+                    ->icon(function (User $record): string {
+                        $isActive = $record->getAttribute('is_active') ?? false;
+                        return $isActive ? 'heroicon-o-x-circle' : 'heroicon-o-check-circle';
+                    })
+                    ->label(function (User $record): string {
+                        $isActive = $record->getAttribute('is_active') ?? false;
+                        return $isActive ? 'Nonaktifkan' : 'Aktifkan';
+                    })
+                    ->color(function (User $record): string {
+                        $isActive = $record->getAttribute('is_active') ?? false;
+                        return $isActive ? 'danger' : 'success';
+                    })
+                    ->requiresConfirmation()
+                    ->modalHeading(function (User $record): string {
+                        $isActive = $record->getAttribute('is_active') ?? false;
+                        return $isActive ? 'Nonaktifkan Pengguna' : 'Aktifkan Pengguna';
+                    })
+                    ->modalDescription(function (User $record): string {
+                        $isActive = $record->getAttribute('is_active') ?? false;
+                        return $isActive ? 'Apakah Anda yakin ingin menonaktifkan pengguna ini?' : 'Apakah Anda yakin ingin mengaktifkan pengguna ini?';
+                    })
+                    ->action(function (User $record): void {
+                        $isActive = $record->getAttribute('is_active') ?? false;
+                        $record->update(['is_active' => !$isActive]);
+                    }),
                 Tables\Actions\Action::make('promote_to_admin')
                     ->icon('heroicon-o-arrow-up')
                     ->label('Jadikan Admin')
                     ->color('success')
-                    ->visible(fn (): bool => auth()->user()?->role === 'super_admin')
+                    ->visible(function (): bool {
+                        $user = auth()->user();
+                        $role = $user ? $user->getAttribute('role') : null;
+                        return $role === 'super_admin';
+                    })
                     ->form([
                         Forms\Components\TextInput::make('jabatan')
                             ->required()
@@ -113,12 +178,13 @@ class UserResource extends Resource
                     ->action(function (User $record, array $data): void {
                         // Buat record admin baru
                         Admin::create([
-                            'name' => $record->name,
-                            'email' => $record->email,
-                            'password' => $record->password,
-                            'phone' => $record->phone,
-                            'jabatan' => $data['jabatan'],
-                            'role' => $data['role'],
+                            'name' => $record->getAttribute('name') ?? '',
+                            'email' => $record->getAttribute('email') ?? '',
+                            // Buat password baru yang aman
+                            'password' => Hash::make(\Illuminate\Support\Str::random(10)),
+                            'phone' => $record->getAttribute('phone') ?? null,
+                            'jabatan' => $data['jabatan'] ?? '',
+                            'role' => $data['role'] ?? 'admin',
                             'is_active' => true,
                         ]);
                         

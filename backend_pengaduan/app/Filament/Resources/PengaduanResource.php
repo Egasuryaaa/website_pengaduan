@@ -35,7 +35,9 @@ class PengaduanResource extends Resource
     // Hanya super admin yang bisa hapus pengaduan
     public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
     {
-        return auth()->user()?->role === 'super_admin';
+        $user = auth()->user();
+        $role = $user ? $user->getAttribute('role') : null;
+        return $role === 'super_admin';
     }
 
     public static function form(Form $form): Form
@@ -67,6 +69,15 @@ class PengaduanResource extends Resource
                     ->required()
                     ->maxLength(255)
                     ->label('Lokasi'),
+                Forms\Components\FileUpload::make('foto')
+                    ->image()
+                    ->disk('public')
+                    ->directory('pengaduan')
+                    ->visibility('public')
+                    ->downloadable()
+                    ->openable()
+                    ->label('Bukti Foto')
+                    ->columnSpanFull(),
                 Forms\Components\Select::make('status')
                     ->options([
                         'pending' => 'Pending',
@@ -80,6 +91,15 @@ class PengaduanResource extends Resource
                 Forms\Components\Textarea::make('tanggapan')
                     ->columnSpanFull()
                     ->label('Tanggapan'),
+                Forms\Components\FileUpload::make('foto_tanggapan')
+                    ->image()
+                    ->disk('public')
+                    ->directory('tanggapan')
+                    ->visibility('public')
+                    ->downloadable()
+                    ->openable()
+                    ->label('Bukti Foto Tanggapan')
+                    ->columnSpanFull(),
                 Forms\Components\Select::make('admin_id')
                     ->relationship('admin', 'name')
                     ->label('Admin'),
@@ -120,6 +140,13 @@ class PengaduanResource extends Resource
                     ->searchable()
                     ->limit(30)
                     ->label('Lokasi'),
+                Tables\Columns\ImageColumn::make('foto')
+                    ->disk('public')
+                    ->height(60)
+                    ->circular(false)
+                    ->defaultImageUrl(url('/images/no-image.png'))
+                    ->label('Bukti Foto')
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('status')
                     ->badge()
                     ->colors([
@@ -161,6 +188,18 @@ class PengaduanResource extends Resource
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\Action::make('lihat_foto')
+                    ->label('Lihat Foto')
+                    ->icon('heroicon-o-photo')
+                    ->color('info')
+                    ->visible(function ($record) {
+                        return $record->getAttribute('foto') !== null;
+                    })
+                    ->url(function ($record) {
+                        $foto = $record->getAttribute('foto');
+                        return $foto ? asset('storage/' . $foto) : null;
+                    })
+                    ->openUrlInNewTab(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

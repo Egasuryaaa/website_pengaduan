@@ -24,8 +24,12 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 
+// Public routes
+Route::get('/kategori', [PengaduanController::class, 'getKategori']);
+
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/pengaduan-statistics', [PengaduanController::class, 'getStatistics']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
     Route::put('/profile', [AuthController::class, 'updateProfile']);
@@ -35,8 +39,5 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/pengaduan', [PengaduanController::class, 'index']);
     Route::post('/pengaduan', [PengaduanController::class, 'store']);
     Route::get('/pengaduan/{id}', [PengaduanController::class, 'show']);
-    Route::get('/pengaduan-statistics', [PengaduanController::class, 'getStatistics']);
-    
-    // Kategori routes
-    Route::get('/kategori', [PengaduanController::class, 'getKategori']);
+    Route::put('/pengaduan/{id}', [PengaduanController::class, 'update']);
 });

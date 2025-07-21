@@ -30,11 +30,12 @@ class AuthController extends Controller
         }
 
         $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-            'phone' => $request->phone,
-            'nama_instansi' => $request->nama_instansi,
+            'name' => $request->input('name'),
+            'email' => $request->input('email'),
+            'password' => Hash::make($request->input('password')),
+            'phone' => $request->input('phone'),
+            'nama_instansi' => $request->input('nama_instansi'),
+            'is_active' => true, // Set user aktif secara default
         ]);
 
         $token = $user->createToken('auth_token')->plainTextToken;
@@ -65,9 +66,9 @@ class AuthController extends Controller
             ], 422);
         }
 
-        $user = User::where('email', $request->email)->first();
+        $user = User::where('email', $request->input('email'))->first();
 
-        if (!$user || !Hash::check($request->password, $user->password)) {
+        if (!$user || !Hash::check($request->input('password'), $user->getAttribute('password'))) {
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid credentials'
@@ -123,9 +124,9 @@ class AuthController extends Controller
 
         $user = $request->user();
         $user->update([
-            'name' => $request->name,
-            'phone' => $request->phone,
-            'nama_instansi' => $request->nama_instansi,
+            'name' => $request->input('name'),
+            'phone' => $request->input('phone'),
+            'nama_instansi' => $request->input('nama_instansi'),
         ]);
 
         return response()->json([
@@ -152,7 +153,7 @@ class AuthController extends Controller
 
         $user = $request->user();
 
-        if (!Hash::check($request->current_password, $user->password)) {
+        if (!Hash::check($request->input('current_password'), $user->getAttribute('password'))) {
             return response()->json([
                 'success' => false,
                 'message' => 'Current password is incorrect'
@@ -160,7 +161,7 @@ class AuthController extends Controller
         }
 
         $user->update([
-            'password' => Hash::make($request->new_password)
+            'password' => Hash::make($request->input('new_password'))
         ]);
 
         return response()->json([

@@ -23,7 +23,9 @@ class KategoriResource extends Resource
     // Hanya super admin yang bisa kelola kategori
     public static function canViewAny(): bool
     {
-        return auth()->user()?->role === 'super_admin';
+        $user = auth()->user();
+        $role = $user ? $user->getAttribute('role') : null;
+        return $role === 'super_admin';
     }
 
     protected static ?string $modelLabel = 'Kategori';

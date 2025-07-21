@@ -13,9 +13,13 @@ class RoleOverview extends BaseWidget
     protected function getStats(): array
     {
         $stats = [];
+        
+        // Ambil user admin saat ini
+        $user = auth()->user();
+        $role = $user ? $user->getAttribute('role') : null;
 
         // Statistik untuk Super Admin
-        if (auth()->user()?->role === 'super_admin') {
+        if ($role === 'super_admin') {
             $stats = [
                 Stat::make('Total Pengaduan', Pengaduan::count())
                     ->description('Semua pengaduan')
@@ -30,8 +34,26 @@ class RoleOverview extends BaseWidget
                     ->descriptionIcon('heroicon-m-users')
                     ->color('warning'),
             ];
-        } else {
-            // Statistik untuk Admin biasa
+        } 
+        // Statistik untuk Staff
+        elseif ($role === 'staff') {
+            $stats = [
+                Stat::make('Total Pengaduan', Pengaduan::count())
+                    ->description('Semua pengaduan')
+                    ->descriptionIcon('heroicon-m-document-text')
+                    ->color('info'),
+                Stat::make('Pengaduan Baru', Pengaduan::where('status', 'pending')->count())
+                    ->description('Menunggu review')
+                    ->descriptionIcon('heroicon-m-clock')
+                    ->color('warning'),
+                Stat::make('Pengguna', User::count())
+                    ->description('User yang terdaftar')
+                    ->descriptionIcon('heroicon-m-users')
+                    ->color('primary'),
+            ];
+        }
+        // Statistik untuk Admin biasa
+        else {
             $stats = [
                 Stat::make('Total Pengaduan', Pengaduan::count())
                     ->description('Semua pengaduan')

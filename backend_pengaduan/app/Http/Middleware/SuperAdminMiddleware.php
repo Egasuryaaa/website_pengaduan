@@ -10,7 +10,9 @@ class SuperAdminMiddleware
 {
     public function handle(Request $request, Closure $next): Response
     {
-        if (!auth()->check() || auth()->user()->role !== 'super_admin') {
+        $user = auth()->user();
+        
+        if (!$user || !$user->getAttribute('role') || $user->getAttribute('role') !== 'super_admin') {
             abort(403, 'Akses ditolak. Hanya Super Admin yang diperbolehkan.');
         }
 

@@ -27,7 +27,15 @@ class AdminResource extends Resource
     // Hanya super admin yang bisa mengakses admin management
     public static function canViewAny(): bool
     {
-        return auth()->user()?->role === 'super_admin';
+        $user = auth()->user();
+        
+        // Periksa apakah pengguna adalah instance dari Admin
+        if (!($user instanceof Admin)) {
+            return false;
+        }
+        
+        $role = $user->getAttribute('role');
+        return $role === 'super_admin';
     }
 
     protected static ?string $modelLabel = 'Administrator';
@@ -66,6 +74,7 @@ class AdminResource extends Resource
                     ->options([
                         'admin' => 'Admin',
                         'super_admin' => 'Super Admin',
+                        'staff' => 'Staff',
                     ])
                     ->required()
                     ->default('admin')
@@ -102,10 +111,17 @@ class AdminResource extends Resource
                     ->label('Jabatan'),
                 Tables\Columns\TextColumn::make('role')
                     ->badge()
-                    ->colors([
-                        'primary' => 'admin',
-                        'success' => 'super_admin',
-                    ])
+                    ->formatStateUsing(function (?string $state): string {
+                        if (is_null($state)) return 'User';
+                        return ucfirst($state);
+                    })
+                    ->color(function (Admin $record) {
+                        $role = $record->getAttribute('role') ?? '';
+                        if ($role === 'admin') return 'primary';
+                        if ($role === 'super_admin') return 'success';
+                        if ($role === 'staff') return 'info';
+                        return 'gray';
+                    })
                     ->label('Role'),
                 Tables\Columns\IconColumn::make('is_active')
                     ->boolean()
@@ -122,6 +138,7 @@ class AdminResource extends Resource
                     ->options([
                         'admin' => 'Admin',
                         'super_admin' => 'Super Admin',
+                        'staff' => 'Staff',
                     ])
                     ->label('Role'),
                 Tables\Filters\TernaryFilter::make('is_active')
@@ -138,6 +155,7 @@ class AdminResource extends Resource
                             ->options([
                                 'admin' => 'Admin',
                                 'super_admin' => 'Super Admin',
+                                'staff' => 'Staff',
                             ])
                             ->required()
                             ->label('Role Baru'),
@@ -151,34 +169,65 @@ class AdminResource extends Resource
                     ->modalSubmitActionLabel('Ubah Role'),
                 Tables\Actions\Action::make('toggle_status')
                     ->icon('heroicon-o-power')
-                    ->label(fn (Admin $record): string => $record->is_active ? 'Nonaktifkan' : 'Aktifkan')
-                    ->color(fn (Admin $record): string => $record->is_active ? 'danger' : 'success')
+                    ->label(function (Admin $record): string {
+                        // Gunakan null coalescing untuk memastikan nilai tidak null
+                        $isActive = $record->getAttribute('is_active') ?? false;
+                        return $isActive ? 'Nonaktifkan' : 'Aktifkan';
+                    })
+                    ->color(function (Admin $record): string {
+                        $isActive = $record->getAttribute('is_active') ?? false;
+                        return $isActive ? 'danger' : 'success';
+                    })
                     ->action(function (Admin $record): void {
-                        $record->update(['is_active' => !$record->is_active]);
+                        $isActive = $record->getAttribute('is_active') ?? false;
+                        $record->update(['is_active' => !$isActive]);
                     })
                     ->requiresConfirmation()
-                    ->modalHeading(fn (Admin $record): string => $record->is_active ? 'Nonaktifkan Administrator' : 'Aktifkan Administrator')
-                    ->modalDescription(fn (Admin $record): string => $record->is_active ? 'Administrator akan dinonaktifkan dan tidak bisa login.' : 'Administrator akan diaktifkan dan bisa login kembali.')
-                    ->modalSubmitActionLabel(fn (Admin $record): string => $record->is_active ? 'Nonaktifkan' : 'Aktifkan'),
+                    ->modalHeading(function (Admin $record): string {
+                        $isActive = $record->getAttribute('is_active') ?? false;
+                        return $isActive ? 'Nonaktifkan Administrator' : 'Aktifkan Administrator';
+                    })
+                    ->modalDescription(function (Admin $record): string {
+                        $isActive = $record->getAttribute('is_active') ?? false;
+                        return $isActive ? 'Administrator akan dinonaktifkan dan tidak bisa login.' : 'Administrator akan diaktifkan dan bisa login kembali.';
+                    })
+                    ->modalSubmitActionLabel(function (Admin $record): string {
+                        $isActive = $record->getAttribute('is_active') ?? false;
+                        return $isActive ? 'Nonaktifkan' : 'Aktifkan';
+                    }),
                 Tables\Actions\Action::make('demote_to_user')
                     ->icon('heroicon-o-arrow-down')
                     ->label('Jadikan User')
                     ->color('warning')
-                    ->visible(fn (Admin $record): bool => auth()->user()?->role === 'super_admin' && $record->role !== 'super_admin')
+                    ->visible(function (Admin $record): bool {
+                        $user = auth()->user();
+                        // Pastikan user adalah instance dari Admin
+                        if (!$user || !($user instanceof Admin)) {
+                            return false;
+                        }
+                        $userRole = $user->getAttribute('role');
+                        $recordRole = $record->getAttribute('role');
+                        return $userRole === 'super_admin' && $recordRole !== 'super_admin';
+                    })
                     ->form([
                         Forms\Components\TextInput::make('nama_instansi')
                             ->label('Nama Instansi')
-                            ->placeholder('Contoh: Dinas Pendidikan'),
+                            ->placeholder('Contoh: Dinas Pendidikan')
+                            ->required(),
                     ])
                     ->action(function (Admin $record, array $data): void {
-                        // Buat record user baru
-                        User::create([
-                            'name' => $record->name,
-                            'email' => $record->email,
-                            'password' => $record->password,
-                            'phone' => $record->phone,
+                        // Buat record user baru dengan data yang aman
+                        $userData = [
+                            'name' => $record->getAttribute('name') ?? '',
+                            'email' => $record->getAttribute('email') ?? '',
+                            // Buat password baru karena password yang sudah di-hash tidak dapat digunakan kembali
+                            'password' => Hash::make(\Illuminate\Support\Str::random(10)),
+                            'phone' => $record->getAttribute('phone') ?? null,
                             'nama_instansi' => $data['nama_instansi'] ?? 'Warga Gunung Kidul',
-                        ]);
+                            'is_active' => true,
+                        ];
+                        
+                        User::create($userData);
                         
                         // Hapus admin dari table admins
                         $record->delete();
@@ -195,13 +244,25 @@ class AdminResource extends Resource
                         ->label('Aktifkan')
                         ->icon('heroicon-o-check')
                         ->color('success')
-                        ->action(fn (Collection $records) => $records->each->update(['is_active' => true]))
+                        ->action(function (Collection $records) {
+                            foreach ($records as $record) {
+                                if ($record instanceof Admin) {
+                                    $record->update(['is_active' => true]);
+                                }
+                            }
+                        })
                         ->requiresConfirmation(),
                     Tables\Actions\BulkAction::make('deactivate')
                         ->label('Nonaktifkan')
                         ->icon('heroicon-o-x-mark')
                         ->color('danger')
-                        ->action(fn (Collection $records) => $records->each->update(['is_active' => false]))
+                        ->action(function (Collection $records) {
+                            foreach ($records as $record) {
+                                if ($record instanceof Admin) {
+                                    $record->update(['is_active' => false]);
+                                }
+                            }
+                        })
                         ->requiresConfirmation(),
                 ]),
             ]);

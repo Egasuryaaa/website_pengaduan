@@ -1,21 +1,55 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:typed_data';
+import 'dart:math';
+import 'package:http_parser/http_parser.dart';
 import '../models/user.dart';
 import '../models/pengaduan.dart';
 import '../models/kategori.dart';
 
 class ApiService {
-  static const String baseUrl = 'http://localhost:8000/api'; // For development
-  // Change to your actual backend URL when deploying
-  // static const String baseUrl = 'https://your-domain.com/api';
+  // Dynamic base URL that works for both web and mobile
+  static String get baseUrl {
+    if (kIsWeb) {
+      // For web, we have two options:
+      // 1. Use relative URL if the API is served from the same domain
+      // 2. Use the full URL if running on a different server
+      
+      // Option 2: Use the full URL for development
+      return 'http://127.0.0.1:8000/api'; // Change this to your actual API server URL
+      
+      // Option 1: Uncomment this when deploying to production if API is on same server
+      // return '/api';
+    } else {
+      // Mobile environment can use localhost
+      return 'http://10.0.2.2:8000/api'; // 10.0.2.2 points to host machine in Android emulator
+    }
+  }
+  
+  // Debug method to print FormData details
+  static void debugFormData(FormData formData) {
+    if (kDebugMode) {
+      print('======= FORM DATA DEBUG =======');
+      print('Fields:');
+      formData.fields.forEach((field) {
+        print('- ${field.key}: ${field.value}');
+      });
+      print('Files:');
+      formData.files.forEach((file) {
+        print('- ${file.key}: ${file.value.filename} (${file.value.contentType?.mimeType})');
+      });
+    }
+  }
   late Dio dio;
 
   ApiService() {
     dio = Dio(BaseOptions(
       baseUrl: baseUrl,
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 10),
+      connectTimeout: const Duration(seconds: 30), // Increased timeout
+      receiveTimeout: const Duration(seconds: 30), // Increased timeout
+      sendTimeout: const Duration(seconds: 30), // Added send timeout
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -312,7 +346,8 @@ class ApiService {
   // Pengaduan API calls
   Future<List<Pengaduan>> getPengaduan() async {
     try {
-      final response = await dio.get('/pengaduan');
+      // Use /my-pengaduan to get only current user's pengaduan
+      final response = await dio.get('/my-pengaduan');
       // Handle response structure with "data" field
       final List<dynamic> data = response.data['data'] ?? response.data;
       return data.map((json) => Pengaduan.fromJson(json)).toList();
@@ -323,7 +358,8 @@ class ApiService {
 
   Future<Pengaduan> getPengaduanById(int id) async {
     try {
-      final response = await dio.get('/pengaduan/$id');
+      // Use /my-pengaduan/{id} to ensure user can only access their own pengaduan
+      final response = await dio.get('/my-pengaduan/$id');
       // Handle single item response
       final data = response.data['data'] ?? response.data;
       return Pengaduan.fromJson(data);
@@ -337,18 +373,169 @@ class ApiService {
     required String deskripsi,
     required int kategoriId,
     String? lokasi,
-    String? foto, // This should be file path or base64
+    String? namaInstansi,
+    String? foto, // File path for mobile
+    Uint8List? imageBytes, // For web
+    dynamic imageFile, // XFile for web
   }) async {
     try {
-      final response = await dio.post('/pengaduan', data: {
+      if (kDebugMode) {
+        print('======= CREATE PENGADUAN API CALL =======');
+        print('Base URL: $baseUrl');
+        print('Endpoint: /pengaduan');
+        print('Judul: $judul');
+        print('Deskripsi: $deskripsi');
+        print('Kategori ID: $kategoriId');
+        print('Lokasi: $lokasi');
+        print('Foto path (mobile): $foto');
+        print('Has Image Bytes (web): ${imageBytes != null}');
+        print('Has Image File (web): ${imageFile != null}');
+        
+        // Check token
+        final token = await getToken();
+        print('Has Auth Token: ${token != null}');
+        if (token != null) {
+          print('Token Length: ${token.length}');
+          print('Token Preview: ${token.substring(0, min(20, token.length))}...');
+        }
+      }
+      
+      // Get current user data untuk mendapatkan nama_instansi jika belum ada
+      User? currentUser;
+      try {
+        currentUser = await getMe();
+      } catch (e) {
+        if (kDebugMode) {
+          print('Failed to get current user: $e');
+        }
+      }
+      
+      FormData formData = FormData.fromMap({
         'judul': judul,
         'deskripsi': deskripsi,
         'kategori_id': kategoriId,
         'lokasi': lokasi,
-        'foto': foto,
+        'nama_instansi': namaInstansi ?? currentUser?.namaInstansi ?? '',
       });
+
+      // Handle file upload based on platform
+      if (kIsWeb) {
+        // Web platform - use bytes
+        if (imageBytes != null && imageFile != null) {
+          // Buat nama file yang unik dengan timestamp
+          DateTime now = DateTime.now();
+          String timestamp = '${now.millisecondsSinceEpoch}';
+          String originalName = 'upload.jpg';
+          
+          // Try to get filename if possible
+          if (imageFile is XFile) {
+            originalName = imageFile.name;
+          }
+          
+          // Pastikan nama file memiliki ekstensi yang benar
+          String extension = originalName.contains('.') 
+              ? originalName.split('.').last 
+              : 'jpg';
+              
+          // Format nama file: timestamp_originalname.extension
+          String fileName = 'pengaduan_${timestamp}.$extension';
+          
+          formData.files.add(MapEntry(
+            'foto',
+            MultipartFile.fromBytes(
+              imageBytes,
+              filename: fileName,
+              contentType: MediaType('image', extension == 'png' ? 'png' : 'jpeg'),
+            ),
+          ));
+          
+          if (kDebugMode) {
+            print('Web upload: Adding file as bytes, filename: $fileName');
+            print('Web upload: Image bytes length: ${imageBytes.length}');
+            print('Web upload: Content type: ${extension == 'png' ? 'image/png' : 'image/jpeg'}');
+          }
+        }
+      } else {
+        // Mobile platform - use file path
+        if (foto != null && foto.isNotEmpty) {
+          // Get file name from path
+          String fileName = foto.split('/').last;
+          // Generate unique timestamp
+          String timestamp = '${DateTime.now().millisecondsSinceEpoch}';
+          // Get extension
+          String extension = fileName.contains('.')
+              ? fileName.split('.').last
+              : 'jpg';
+          
+          // Format nama file: timestamp_originalname.extension
+          String newFileName = 'pengaduan_${timestamp}.$extension';
+          
+          formData.files.add(MapEntry(
+            'foto',
+            await MultipartFile.fromFile(
+              foto,
+              filename: newFileName,
+              contentType: MediaType('image', extension == 'png' ? 'png' : 'jpeg'),
+            ),
+          ));
+          
+          if (kDebugMode) {
+            print('Mobile upload: Adding file from path: $foto');
+            print('Mobile upload: New filename: $newFileName');
+            print('Mobile upload: Content type: ${extension == 'png' ? 'image/png' : 'image/jpeg'}');
+          }
+        }
+      }
+      
+      if (kDebugMode) {
+        print('FormData fields: ${formData.fields}');
+        print('FormData files: ${formData.files.length}');
+        print('Sending POST request to: $baseUrl/pengaduan');
+      }
+
+      final response = await dio.post(
+        '/pengaduan',
+        data: formData,
+        options: Options(
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'multipart/form-data',
+          },
+          followRedirects: false,
+          validateStatus: (status) {
+            return status! < 500;
+          },
+        ),
+      );
+      
+      if (kDebugMode) {
+        print('Response status code: ${response.statusCode}');
+        print('Response headers: ${response.headers}');
+        print('Response data: ${response.data}');
+        
+        // Detail debug untuk file foto
+        if (response.data is Map && response.data['data'] is Map) {
+          final pengaduanData = response.data['data'];
+          print('Foto URL in response: ${pengaduanData['foto']}');
+          print('Full pengaduan data: $pengaduanData');
+        }
+      }
+      
+      if (response.statusCode! >= 400) {
+        throw Exception('Server error: ${response.statusCode} - ${response.data}');
+      }
+      
       return response.data;
     } catch (e) {
+      if (kDebugMode) {
+        print('Error creating pengaduan: $e');
+        if (e is DioException) {
+          print('DioError type: ${e.type}');
+          print('DioError message: ${e.message}');
+          print('DioError response status: ${e.response?.statusCode}');
+          print('DioError response data: ${e.response?.data}');
+        }
+      }
       throw Exception('Failed to create pengaduan: $e');
     }
   }

@@ -18,10 +18,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<PengaduanProvider>(context, listen: false).loadStatistics();
-      Provider.of<StatisticsProvider>(context, listen: false).loadStatistics();
-    });
+    // DO NOT load data in initState - let the screen handle it
   }
 
   @override
@@ -414,69 +411,92 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildPengaduanList() {
     return Consumer<PengaduanProvider>(
       builder: (context, pengaduanProvider, child) {
-        if (pengaduanProvider.pengaduans.isEmpty) {
-          pengaduanProvider.loadPengaduans();
-        }
-
-        if (pengaduanProvider.isLoading) {
+        // Only show loading on first load or when explicitly loading
+        if (pengaduanProvider.isLoading && !pengaduanProvider.hasLoadedOnce) {
           return const Center(child: CircularProgressIndicator());
         }
 
+        if (pengaduanProvider.error != null) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error, size: 64, color: Colors.red),
+                SizedBox(height: 16),
+                Text('Error: ${pengaduanProvider.error}'),
+                SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => pengaduanProvider.loadPengaduans(),
+                  child: Text('Coba Lagi'),
+                ),
+              ],
+            ),
+          );
+        }
+
         if (pengaduanProvider.pengaduans.isEmpty) {
-          return const Center(
+          return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(Icons.report_off, size: 64, color: Colors.grey),
                 SizedBox(height: 16),
                 Text('Belum ada pengaduan'),
+                SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => pengaduanProvider.loadPengaduans(),
+                  child: Text('Muat Pengaduan'),
+                ),
               ],
             ),
           );
         }
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: pengaduanProvider.pengaduans.length,
-          itemBuilder: (context, index) {
-            final pengaduan = pengaduanProvider.pengaduans[index];
-            return Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                title: Text(pengaduan.judul),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(pengaduan.deskripsi.length > 100
-                        ? '${pengaduan.deskripsi.substring(0, 100)}...'
-                        : pengaduan.deskripsi),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(
-                          _getStatusIcon(pengaduan.status),
-                          size: 16,
-                          color: _getStatusColor(pengaduan.status),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          pengaduan.status,
-                          style: TextStyle(
+        return RefreshIndicator(
+          onRefresh: () => pengaduanProvider.loadPengaduans(),
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: pengaduanProvider.pengaduans.length,
+            itemBuilder: (context, index) {
+              final pengaduan = pengaduanProvider.pengaduans[index];
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  title: Text(pengaduan.judul),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(pengaduan.deskripsi.length > 100
+                          ? '${pengaduan.deskripsi.substring(0, 100)}...'
+                          : pengaduan.deskripsi),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            _getStatusIcon(pengaduan.status),
+                            size: 16,
                             color: _getStatusColor(pengaduan.status),
-                            fontWeight: FontWeight.bold,
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                          const SizedBox(width: 4),
+                          Text(
+                            pengaduan.status,
+                            style: TextStyle(
+                              color: _getStatusColor(pengaduan.status),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  trailing: const Icon(Icons.arrow_forward_ios),
+                  onTap: () {
+                    context.push('/pengaduan/${pengaduan.id}');
+                  },
                 ),
-                trailing: const Icon(Icons.arrow_forward_ios),
-                onTap: () {
-                  context.push('/pengaduan/${pengaduan.id}');
-                },
-              ),
-            );
-          },
+              );
+            },
+          ),
         );
       },
     );

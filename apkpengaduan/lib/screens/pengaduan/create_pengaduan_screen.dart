@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'dart:io' as io;
+import 'package:flutter/foundation.dart';
+import 'dart:typed_data';
 import '../../providers/pengaduan_provider.dart';
 
 class CreatePengaduanScreen extends StatefulWidget {
@@ -15,8 +20,13 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
   final _judulController = TextEditingController();
   final _deskripsiController = TextEditingController();
   final _lokasiController = TextEditingController();
-  final _fotoController = TextEditingController();
+  final _namaInstansiController = TextEditingController();
   int? _selectedKategoriId;
+  // Support both web and mobile
+  io.File? _selectedImageFile;
+  XFile? _selectedImage;
+  Uint8List? _webImage;
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -31,8 +41,161 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
     _judulController.dispose();
     _deskripsiController.dispose();
     _lokasiController.dispose();
-    _fotoController.dispose();
+    _namaInstansiController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      // Request permission for camera or gallery (only on mobile)
+      if (!kIsWeb && source == ImageSource.camera) {
+        final status = await Permission.camera.request();
+        if (!status.isGranted) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Izin kamera diperlukan untuk mengambil foto'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+      }
+
+      final XFile? image = await _picker.pickImage(
+        source: source,
+        maxHeight: 1024,
+        maxWidth: 1024,
+        imageQuality: 85,
+      );
+
+      if (image != null) {
+        if (kIsWeb) {
+          // Web platform handling
+          // Read file as bytes
+          final bytes = await image.readAsBytes();
+          
+          // Check file size (max 5MB)
+          if (bytes.length > 5 * 1024 * 1024) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Ukuran file terlalu besar (maksimal 5MB)'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+            return;
+          }
+          
+          setState(() {
+            _selectedImage = image;
+            _webImage = bytes;
+          });
+        } else {
+          // Mobile platform handling
+          final file = io.File(image.path);
+          
+          // Cek apakah file benar-benar ada
+          if (await file.exists()) {
+            // Cek ukuran file (maksimal 5MB)
+            final fileSize = await file.length();
+            if (fileSize > 5 * 1024 * 1024) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Ukuran file terlalu besar (maksimal 5MB)'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+              return;
+            }
+            
+            setState(() {
+              _selectedImage = image;
+              _selectedImageFile = file;
+            });
+          } else {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('File gambar tidak ditemukan'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error memilih gambar: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _imageErrorWidget() {
+    return Container(
+      color: Colors.grey[200],
+      child: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error, color: Colors.red),
+            Text('Gagal memuat gambar'),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _imageLoadingWidget() {
+    return Container(
+      color: Colors.grey[200],
+      child: const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+  }
+
+  void _showImagePickerDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Pilih Sumber Gambar'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!kIsWeb) // Show camera option only on mobile
+                ListTile(
+                  leading: const Icon(Icons.camera_alt),
+                  title: const Text('Kamera'),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _pickImage(ImageSource.camera);
+                  },
+                ),
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Galeri'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _pickImage(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _submitPengaduan() async {
@@ -48,7 +211,46 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
       }
 
       try {
+        if (kDebugMode) {
+          print('====== SUBMITTING PENGADUAN ======');
+          print('Judul: ${_judulController.text.trim()}');
+          print('Deskripsi: ${_deskripsiController.text.trim()}');
+          print('Kategori ID: $_selectedKategoriId');
+          print('Lokasi: ${_lokasiController.text.trim()}');
+          print('Nama Instansi: ${_namaInstansiController.text.trim()}');
+          print('Has Image: ${_selectedImage != null}');
+        }
+
         final pengaduanProvider = Provider.of<PengaduanProvider>(context, listen: false);
+        
+        // Always pass the XFile directly for better handling
+        XFile? imageFile = _selectedImage;
+        
+        if (kDebugMode && imageFile != null) {
+          print('Image Info:');
+          print('- Image name: ${imageFile.name}');
+          print('- Image path: ${imageFile.path}');
+          
+          if (kIsWeb) {
+            final bytes = await imageFile.readAsBytes();
+            print('- Web image bytes size: ${bytes.length} bytes');
+          } else if (_selectedImageFile != null) {
+            print('- Mobile file exists: ${_selectedImageFile!.existsSync()}');
+            print('- Mobile file size: ${await _selectedImageFile!.length()} bytes');
+          }
+        }
+        
+        if (kDebugMode) {
+          print('Calling createPengaduan on provider...');
+        }
+        
+        // Always include nama_instansi as it's required by the API
+        String namaInstansi = _namaInstansiController.text.trim();
+        if (namaInstansi.isEmpty) {
+          // If not provided, use a default value to prevent API validation errors
+          namaInstansi = "Default";
+        }
+        
         final success = await pengaduanProvider.createPengaduan(
           judul: _judulController.text.trim(),
           deskripsi: _deskripsiController.text.trim(),
@@ -56,10 +258,14 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
           lokasi: _lokasiController.text.trim().isEmpty 
               ? null 
               : _lokasiController.text.trim(),
-          foto: _fotoController.text.trim().isEmpty 
-              ? null 
-              : _fotoController.text.trim(),
+          namaInstansi: namaInstansi,
+          imageFile: imageFile,
         );
+
+        if (kDebugMode) {
+          print('createPengaduan result: $success');
+          print('Error: ${pengaduanProvider.error}');
+        }
 
         if (success && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -72,7 +278,7 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
         } else if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Gagal membuat pengaduan: ${pengaduanProvider.error}'),
+              content: Text('Gagal membuat pengaduan: ${pengaduanProvider.error ?? "Unknown error"}'),
               backgroundColor: Colors.red,
             ),
           );
@@ -139,9 +345,6 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
                               if (value == null || value.trim().isEmpty) {
                                 return 'Judul tidak boleh kosong';
                               }
-                              if (value.trim().length < 10) {
-                                return 'Judul minimal 10 karakter';
-                              }
                               return null;
                             },
                           ),
@@ -186,9 +389,6 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
                               if (value == null || value.trim().isEmpty) {
                                 return 'Deskripsi tidak boleh kosong';
                               }
-                              if (value.trim().length < 20) {
-                                return 'Deskripsi minimal 20 karakter';
-                              }
                               return null;
                             },
                           ),
@@ -210,22 +410,155 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
                           ),
                           const SizedBox(height: 16),
                           TextFormField(
-                            controller: _fotoController,
+                            controller: _namaInstansiController,
                             decoration: const InputDecoration(
-                              labelText: 'Foto Bukti (Opsional)',
-                              prefixIcon: Icon(Icons.camera_alt),
+                              labelText: 'Nama Instansi *',
+                              prefixIcon: Icon(Icons.business),
                               border: OutlineInputBorder(),
-                              hintText: 'URL foto atau path file',
+                              hintText: 'Masukkan nama instansi atau perusahaan',
                             ),
                             validator: (value) {
-                              if (value != null && value.trim().isNotEmpty) {
-                                // Basic validation for file path or URL
-                                if (!value.contains('/') && !value.contains('http')) {
-                                  return 'Masukkan path file atau URL yang valid';
-                                }
+                              if (value == null || value.trim().isEmpty) {
+                                return 'Nama instansi tidak boleh kosong';
                               }
                               return null;
                             },
+                          ),
+                          const SizedBox(height: 16),
+                          // Image picker widget
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Foto Bukti (Opsional)',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              if (_selectedImage != null) ...[
+                                Container(
+                                  height: 200,
+                                  width: double.infinity,
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: Colors.grey),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: kIsWeb 
+                                      ? _webImage != null 
+                                        ? Image.memory(
+                                            _webImage!,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (context, error, stackTrace) {
+                                              return _imageErrorWidget();
+                                            },
+                                          )
+                                        : _imageLoadingWidget()
+                                      : _selectedImageFile != null
+                                        ? Image.file(
+                                            _selectedImageFile!,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (context, error, stackTrace) {
+                                              return _imageErrorWidget();
+                                            },
+                                          )
+                                        : FutureBuilder<Uint8List>(
+                                            future: _selectedImage!.readAsBytes(),
+                                            builder: (context, snapshot) {
+                                              if (snapshot.connectionState == ConnectionState.done && 
+                                                  snapshot.data != null) {
+                                                return Image.memory(
+                                                  snapshot.data!,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder: (context, error, stackTrace) {
+                                                    return _imageErrorWidget();
+                                                  },
+                                                );
+                                              } else {
+                                                return _imageLoadingWidget();
+                                              }
+                                            },
+                                          ),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: ElevatedButton.icon(
+                                        onPressed: _showImagePickerDialog,
+                                        icon: const Icon(Icons.edit),
+                                        label: const Text('Ganti Foto'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.blue,
+                                          foregroundColor: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    ElevatedButton.icon(
+                                      onPressed: () {
+                                        setState(() {
+                                          _selectedImage = null;
+                                          _selectedImageFile = null;
+                                          _webImage = null;
+                                        });
+                                      },
+                                      icon: const Icon(Icons.delete),
+                                      label: const Text('Hapus'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ] else ...[
+                                GestureDetector(
+                                  onTap: _showImagePickerDialog,
+                                  child: Container(
+                                    height: 120,
+                                    width: double.infinity,
+                                    decoration: BoxDecoration(
+                                      border: Border.all(
+                                        color: Colors.grey.shade400,
+                                        style: BorderStyle.solid,
+                                      ),
+                                      borderRadius: BorderRadius.circular(8),
+                                      color: Colors.grey.shade50,
+                                    ),
+                                    child: const Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.add_a_photo,
+                                          size: 40,
+                                          color: Colors.grey,
+                                        ),
+                                        SizedBox(height: 8),
+                                        Text(
+                                          'Ketuk untuk menambah foto',
+                                          style: TextStyle(
+                                            color: Colors.grey,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        Text(
+                                          'Kamera atau Galeri',
+                                          style: TextStyle(
+                                            color: Colors.grey,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ],
                       ),

@@ -37,6 +37,8 @@ Route::middleware('auth:sanctum')->group(function () {
     
     // Pengaduan routes
     Route::get('/pengaduan', [PengaduanController::class, 'index']);
+    Route::get('/my-pengaduan', [PengaduanController::class, 'myPengaduan']);
+    Route::get('/my-pengaduan/{id}', [PengaduanController::class, 'myPengaduanDetail']);
     Route::post('/pengaduan', [PengaduanController::class, 'store']);
     Route::get('/pengaduan/{id}', [PengaduanController::class, 'show']);
     Route::put('/pengaduan/{id}', [PengaduanController::class, 'update']);

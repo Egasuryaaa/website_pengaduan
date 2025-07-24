@@ -48,6 +48,11 @@ dependencies:
   # Local storage
   shared_preferences: ^2.2.3
   
+  # Image picking and camera
+  image_picker: ^1.0.4
+  permission_handler: ^11.0.1
+  path: ^1.8.3
+  
   # UI components
   flutter_svg: ^2.0.10+1
 

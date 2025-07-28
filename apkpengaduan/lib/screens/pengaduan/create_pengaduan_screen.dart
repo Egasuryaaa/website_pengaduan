@@ -197,7 +197,7 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
     );
   }
 
-  Future<void> _submitPengaduan() async {
+ Future<void> _submitPengaduan() async {
     if (_formKey.currentState!.validate()) {
       if (_selectedKategoriId == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -225,6 +225,22 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
           listen: false,
         );
 
+        // Validate required fields
+        final judul = _judulController.text.trim();
+        final deskripsi = _deskripsiController.text.trim();
+        final lokasi = _lokasiController.text.trim();
+        final namaInstansi = _namaInstansiController.text.trim();
+
+        if (judul.isEmpty || deskripsi.isEmpty || lokasi.isEmpty || namaInstansi.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Semua field wajib harus diisi'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+
         // Always pass the XFile directly for better handling
         XFile? imageFile = _selectedImage;
 
@@ -247,26 +263,14 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
         }
 
         if (kDebugMode) {
-          developer.log(
-            '- Calling createPengaduan on provider: ${await _selectedImageFile!.length()} bytes',
-          );
-        }
-
-        // Always include nama_instansi as it's required by the API
-        String namaInstansi = _namaInstansiController.text.trim();
-        if (namaInstansi.isEmpty) {
-          // If not provided, use a default value to prevent API validation errors
-          namaInstansi = "Default";
+          developer.log('- Calling createPengaduan on provider');
         }
 
         final success = await pengaduanProvider.createPengaduan(
-          judul: _judulController.text.trim(),
-          deskripsi: _deskripsiController.text.trim(),
+          judul: judul,
+          deskripsi: deskripsi,
           kategoriId: _selectedKategoriId!,
-          lokasi:
-              _lokasiController.text.trim().isEmpty
-                  ? null
-                  : _lokasiController.text.trim(),
+          lokasi: lokasi,
           namaInstansi: namaInstansi,
           imageFile: imageFile,
         );
@@ -295,15 +299,22 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
           );
         }
       } catch (e) {
+        if (kDebugMode) {
+          print('Exception in _submitPengaduan: $e');
+          print('Stack trace: ${StackTrace.current}');
+        }
+        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+            SnackBar(
+              content: Text('Error: $e'), 
+              backgroundColor: Colors.red,
+            ),
           );
         }
       }
     }
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(

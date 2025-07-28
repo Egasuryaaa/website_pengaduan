@@ -103,6 +103,16 @@ class PengaduanProvider extends ChangeNotifier {
         print(
           "createPengaduan called in provider with imageFile: ${imageFile != null}",
         );
+        print("Judul: $judul");
+        print("Deskripsi: $deskripsi");
+        print("Kategori ID: $kategoriId");
+        print("Lokasi: $lokasi");
+        print("Nama Instansi: $namaInstansi");
+      }
+
+      // Validate required fields
+      if (judul.trim().isEmpty || deskripsi.trim().isEmpty) {
+        throw Exception('Judul dan deskripsi harus diisi');
       }
 
       // If an XFile was provided, use our specialized ImageUploadService
@@ -111,34 +121,58 @@ class PengaduanProvider extends ChangeNotifier {
           print("Using specialized ImageUploadService");
         }
 
-        // Ensure namaInstansi is not null for the service call
-        String instansi = namaInstansi ?? '';
+        // Ensure required fields are not null or empty
+        final instansi = namaInstansi?.trim() ?? '';
+        final lokasiKejadian = lokasi?.trim() ?? '';
+        
+        if (instansi.isEmpty) {
+          throw Exception('Nama instansi harus diisi');
+        }
 
-        await ImageUploadService.uploadPengaduanWithImage(
-          judul: judul,
-          deskripsi: deskripsi,
+        final response = await ImageUploadService.uploadPengaduanWithImage(
+          judul: judul.trim(),
+          deskripsi: deskripsi.trim(),
           kategoriId: kategoriId,
-          lokasi: lokasi,
+          lokasi: lokasiKejadian.isEmpty ? null : lokasiKejadian,
           namaInstansi: instansi,
           imageFile: imageFile,
         );
+
+        if (kDebugMode) {
+          print("ImageUploadService response: $response");
+        }
+
+        // Check if response contains pengaduan data
+        if (response.containsKey('data') || response.containsKey('id')) {
+          // Success - refresh the list
+          await loadPengaduans();
+          _isLoading = false;
+          notifyListeners();
+          return true;
+        } else {
+          throw Exception('Invalid response from server');
+        }
       } else {
-        // Otherwise use the regular method
+        // Otherwise use the regular method (without image)
+        if (kDebugMode) {
+          print("Using regular API service (no image)");
+        }
+
         await _apiService.createPengaduan(
-          judul: judul,
-          deskripsi: deskripsi,
+          judul: judul.trim(),
+          deskripsi: deskripsi.trim(),
           kategoriId: kategoriId,
-          lokasi: lokasi,
-          namaInstansi: namaInstansi,
+          lokasi: lokasi?.trim(),
+          namaInstansi: namaInstansi?.trim(),
           foto: foto,
           imageBytes: imageBytes,
         );
-      }
 
-      await loadPengaduans(); // Refresh the list
-      _isLoading = false;
-      notifyListeners();
-      return true;
+        await loadPengaduans(); // Refresh the list
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
     } catch (e) {
       _error = e.toString();
       _isLoading = false;

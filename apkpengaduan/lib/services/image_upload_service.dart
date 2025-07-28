@@ -17,18 +17,22 @@ class ImageUploadService {
     }
   }
 
-  /// Debug method to print FormData details for troubleshooting
+  /// Debug method to debugPrint FormData details for troubleshooting
   static void debugFormData(FormData formData) {
     if (kDebugMode) {
-      print('======= FORM DATA DEBUG =======');
-      print('Fields:');
-      formData.fields.forEach((field) {
-        print('- ${field.key}: ${field.value}');
-      });
-      print('Files:');
-      formData.files.forEach((file) {
-        print('- ${file.key}: ${file.value.filename} (${file.value.contentType?.mimeType})');
-      });
+      debugPrint('======= FORM DATA DEBUG =======');
+      debugPrint('Fields:');
+      for (final field in formData.fields) {
+        debugPrint('- ${field.key}: ${field.value}');
+      }
+
+      debugPrint('Files:');
+
+      for (final file in formData.files) {
+        debugPrint(
+          '- ${file.key}: ${file.value.filename} (${file.value.contentType?.mimeType})',
+        );
+      }
     }
   }
 
@@ -43,10 +47,10 @@ class ImageUploadService {
     required XFile imageFile,
   }) async {
     if (kDebugMode) {
-      print('======= UPLOAD PENGADUAN WITH IMAGE =======');
-      print('Image filename: ${imageFile.name}');
+      debugPrint('======= UPLOAD PENGADUAN WITH IMAGE =======');
+      debugPrint('Image filename: ${imageFile.name}');
     }
-    
+
     // Validate file exists and is readable before proceeding
     try {
       final fileSize = await imageFile.length();
@@ -54,11 +58,11 @@ class ImageUploadService {
         throw Exception('File is empty or cannot be read');
       }
       if (kDebugMode) {
-        print('File size verified: $fileSize bytes');
+        debugPrint('File size verified: $fileSize bytes');
       }
     } catch (e) {
       if (kDebugMode) {
-        print('ERROR: Failed to validate file: $e');
+        debugPrint('ERROR: Failed to validate file: $e');
       }
       throw Exception('Failed to validate image file: $e');
     }
@@ -77,7 +81,7 @@ class ImageUploadService {
       formData.fields.add(MapEntry('deskripsi', deskripsi));
       formData.fields.add(MapEntry('kategori_id', kategoriId.toString()));
       formData.fields.add(MapEntry('nama_instansi', namaInstansi));
-      
+
       if (lokasi != null && lokasi.isNotEmpty) {
         formData.fields.add(MapEntry('lokasi', lokasi));
       }
@@ -86,7 +90,7 @@ class ImageUploadService {
       final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
       final String originalName = imageFile.name;
       final String extension = originalName.split('.').last.toLowerCase();
-      final String uniqueFilename = 'pengaduan_${timestamp}.$extension';
+      final String uniqueFilename = 'pengaduan_$timestamp.$extension';
 
       // Determine correct MIME type based on file extension
       String mimeType;
@@ -109,88 +113,98 @@ class ImageUploadService {
       if (kIsWeb) {
         // Web platform - use bytes
         final bytes = await imageFile.readAsBytes();
-        
+
         if (kDebugMode) {
-          print('Web platform detected');
-          print('Image bytes length: ${bytes.length}');
+          debugPrint('Web platform detected');
+          debugPrint('Image bytes length: ${bytes.length}');
         }
-        
+
         // Use 'foto' as the field name to match what Laravel expects
         // This matches the field name in your API response example
-        formData.files.add(MapEntry(
-          'foto', // Must match the field name in the Laravel controller
-          MultipartFile.fromBytes(
-            bytes,
-            filename: uniqueFilename,
-            contentType: MediaType.parse(mimeType),
+        formData.files.add(
+          MapEntry(
+            'foto', // Must match the field name in the Laravel controller
+            MultipartFile.fromBytes(
+              bytes,
+              filename: uniqueFilename,
+              contentType: MediaType.parse(mimeType),
+            ),
           ),
-        ));
+        );
       } else {
         // Mobile platform - use file path
         if (kDebugMode) {
-          print('Mobile platform detected');
-          print('Image path: ${imageFile.path}');
+          debugPrint('Mobile platform detected');
+          debugPrint('Image path: ${imageFile.path}');
         }
-        
+
         // Use 'foto' as the field name to match what Laravel expects
         // This matches the field name in your API response example
-        formData.files.add(MapEntry(
-          'foto', // Must match the field name in the Laravel controller
-          await MultipartFile.fromFile(
-            imageFile.path,
-            filename: uniqueFilename,
-            contentType: MediaType.parse(mimeType),
+        formData.files.add(
+          MapEntry(
+            'foto', // Must match the field name in the Laravel controller
+            await MultipartFile.fromFile(
+              imageFile.path,
+              filename: uniqueFilename,
+              contentType: MediaType.parse(mimeType),
+            ),
           ),
-        ));
+        );
       }
 
       // Debug log the form data contents before sending
       debugFormData(formData);
 
       // Create a dedicated Dio instance with extended timeouts
-      final dio = Dio(BaseOptions(
-        connectTimeout: const Duration(seconds: 60),
-        receiveTimeout: const Duration(seconds: 60),
-        sendTimeout: const Duration(seconds: 60),
-        // These settings help with CORS on web
-        validateStatus: (status) => status! < 500,
-        responseType: ResponseType.json,
-      ));
-      
+      final dio = Dio(
+        BaseOptions(
+          connectTimeout: const Duration(seconds: 60),
+          receiveTimeout: const Duration(seconds: 60),
+          sendTimeout: const Duration(seconds: 60),
+          // These settings help with CORS on web
+          validateStatus: (status) => status! < 500,
+          responseType: ResponseType.json,
+        ),
+      );
+
       // Add logging interceptor
-      dio.interceptors.add(LogInterceptor(
-        requestBody: true,
-        responseBody: true,
-        logPrint: (obj) {
-          if (kDebugMode) {
-            print(obj);
-          }
-        },
-      ));
+      dio.interceptors.add(
+        LogInterceptor(
+          requestBody: true,
+          responseBody: true,
+          logPrint: (obj) {
+            if (kDebugMode) {
+              debugPrint(obj.toString());
+            }
+          },
+        ),
+      );
 
       // Make the API request
       if (kDebugMode) {
-        print('===== SENDING REQUEST TO SERVER =====');
-        print('URL: $baseUrl/pengaduan');
-        print('Authorization token length: ${token.length}');
-        print('Content-Type: ${Headers.multipartFormDataContentType}');
-        print('Filename: $uniqueFilename');
+        debugPrint('===== SENDING REQUEST TO SERVER =====');
+        debugPrint('URL: $baseUrl/pengaduan');
+        debugPrint('Authorization token length: ${token.length}');
+        debugPrint('Content-Type: ${Headers.multipartFormDataContentType}');
+        debugPrint('Filename: $uniqueFilename');
       }
-      
+
       // Add additional debug information before sending
       if (kDebugMode) {
-        print('===== CHECKING REQUEST FORMAT =====');
-        print('Total fields in FormData: ${formData.fields.length}');
-        print('Total files in FormData: ${formData.files.length}');
-        print('Image file field name: foto');
+        debugPrint('===== CHECKING REQUEST FORMAT =====');
+        debugPrint('Total fields in FormData: ${formData.fields.length}');
+        debugPrint('Total files in FormData: ${formData.files.length}');
+        debugPrint('Image file field name: foto');
         if (formData.files.isEmpty) {
-          print('WARNING: No files in FormData! Check if file was properly added.');
+          debugPrint(
+            'WARNING: No files in FormData! Check if file was properly added.',
+          );
         }
       }
-      
+
       // Different approach for web and mobile
       Response<dynamic> response;
-      
+
       if (kIsWeb) {
         // For web, use a more browser-friendly approach with explicit content type
         try {
@@ -206,20 +220,23 @@ class ImageUploadService {
               // For web uploads, let Dio handle the content type automatically
               followRedirects: false,
               validateStatus: (status) {
-                return status != null && status < 500; // Allow all responses for debugging
+                return status != null &&
+                    status < 500; // Allow all responses for debugging
               },
             ),
           );
         } catch (e) {
           if (kDebugMode) {
-            print('Web upload error: $e');
-            print('Trying alternative approach with direct fetch API...');
+            debugPrint('Web upload error: $e');
+            debugPrint('Trying alternative approach with direct fetch API...');
           }
-          
+
           // If Dio approach failed, our upload might be failing due to CORS
           // Try an alternative approach using direct fetch API
-          throw Exception('Web upload failed. Please try uploading from a mobile device or ' +
-                         'ensure your backend has proper CORS configuration for file uploads.');
+          throw Exception(
+            'Web upload failed. Please try uploading from a mobile device or '
+            'ensure your backend has proper CORS configuration for file uploads.',
+          );
         }
       } else {
         // For mobile, use the standard approach
@@ -237,86 +254,103 @@ class ImageUploadService {
             contentType: Headers.multipartFormDataContentType,
             followRedirects: false,
             validateStatus: (status) {
-              return status != null && status < 500; // Allow all responses for debugging
+              return status != null &&
+                  status < 500; // Allow all responses for debugging
             },
           ),
         );
       }
-      
+
       if (kDebugMode) {
-        print('===== RESPONSE FROM SERVER =====');
-        print('Status code: ${response.statusCode}');
-        print('Headers: ${response.headers}');
-        print('Response data: ${response.data}');
-        
+        debugPrint('===== RESPONSE FROM SERVER =====');
+        debugPrint('Status code: ${response.statusCode}');
+        debugPrint('Headers: ${response.headers}');
+        debugPrint('Response data: ${response.data}');
+
         // Detailed inspection of response structure
         if (response.data is Map<String, dynamic>) {
-          print('Response structure:');
+          debugPrint('Response structure:');
           response.data.forEach((key, value) {
-            print('- $key: ${value?.runtimeType}');
+            debugPrint('- $key: ${value?.runtimeType}');
           });
-          
+
           // Check for data field in response
           if (response.data['data'] != null && response.data['data'] is Map) {
             final pengaduanData = response.data['data'];
-            print('Pengaduan data:');
-            pengaduanData.forEach((key, value) {
-              print('  - $key: ${value ?? "null"}');
-            });
-            
+            debugPrint('Pengaduan data:');
+            for (final entry in pengaduanData.entries) {
+              debugPrint('  - ${entry.key}: ${entry.value ?? "null"}');
+            }
+
             // Specifically check for foto field
             if (pengaduanData.containsKey('foto')) {
-              print('FOTO field is present in response: ${pengaduanData['foto']}');
+              debugPrint(
+                'FOTO field is present in response: ${pengaduanData['foto']}',
+              );
             } else {
-              print('FOTO field is MISSING in response!');
+              debugPrint('FOTO field is MISSING in response!');
             }
-            
+
             // Check if bukti_foto is used instead
             if (pengaduanData.containsKey('bukti_foto')) {
-              print('BUKTI_FOTO field is present in response: ${pengaduanData['bukti_foto']}');
+              debugPrint(
+                'BUKTI_FOTO field is present in response: ${pengaduanData['bukti_foto']}',
+              );
             }
           } else {
-            print('No "data" field in response or it is not a Map');
+            debugPrint('No "data" field in response or it is not a Map');
             // Try to find foto field in the main response
             if (response.data.containsKey('foto')) {
-              print('FOTO field is present at root level: ${response.data['foto']}');
+              debugPrint(
+                'FOTO field is present at root level: ${response.data['foto']}',
+              );
             }
             if (response.data.containsKey('bukti_foto')) {
-              print('BUKTI_FOTO field is present at root level: ${response.data['bukti_foto']}');
+              debugPrint(
+                'BUKTI_FOTO field is present at root level: ${response.data['bukti_foto']}',
+              );
             }
           }
         } else {
-          print('Response is not a Map<String, dynamic>');
+          debugPrint('Response is not a Map<String, dynamic>');
         }
       }
-      
-      return response.data;
+
+      return response.data as Map<String, dynamic>;
     } on DioException catch (e) {
       if (kDebugMode) {
-        print('===== DIO ERROR =====');
-        print('Error type: ${e.type}');
-        print('Error message: ${e.message}');
-        print('Request path: ${e.requestOptions.path}');
-        print('Request headers: ${e.requestOptions.headers}');
-        print('Response status: ${e.response?.statusCode}');
-        print('Response data: ${e.response?.data}');
-        
+        debugPrint('===== DIO ERROR =====');
+        debugPrint('Error type: ${e.type}');
+        debugPrint('Error message: ${e.message}');
+        debugPrint('Request path: ${e.requestOptions.path}');
+        debugPrint('Request headers: ${e.requestOptions.headers}');
+        debugPrint('Response status: ${e.response?.statusCode}');
+        debugPrint('Response data: ${e.response?.data}');
+
         // For multipart form data issues, check the request
         if (e.requestOptions.data is FormData) {
-          print('FormData was being sent. Check field names:');
+          debugPrint('FormData was being sent. Check field names:');
           final FormData formData = e.requestOptions.data as FormData;
-          formData.fields.forEach((field) => print('Field: ${field.key}=${field.value}'));
-          formData.files.forEach((file) => 
-            print('File: ${file.key}, filename=${file.value.filename}, contentType=${file.value.contentType}'));
+          for (final field in formData.fields) {
+            debugPrint('Field: ${field.key}=${field.value}');
+          }
+
+          for (final file in formData.files) {
+            debugPrint(
+              'File: ${file.key}, filename=${file.value.filename}, contentType=${file.value.contentType}',
+            );
+          }
         }
       }
       // Return a more detailed error message
-      throw Exception('Upload failed: ${e.response?.data ?? e.message}. Status: ${e.response?.statusCode}');
+      throw Exception(
+        'Upload failed: ${e.response?.data ?? e.message}. Status: ${e.response?.statusCode}',
+      );
     } catch (e) {
       if (kDebugMode) {
-        print('===== GENERAL ERROR =====');
-        print('Error: $e');
-        print('Stack trace: ${StackTrace.current}');
+        debugPrint('===== GENERAL ERROR =====');
+        debugPrint('Error: $e');
+        debugPrint('Stack trace: ${StackTrace.current}');
       }
       throw Exception('Upload failed: $e');
     }

@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
@@ -5,7 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:io' as io;
 import 'package:flutter/foundation.dart';
-import 'dart:typed_data';
+
 import '../../providers/pengaduan_provider.dart';
 
 class CreatePengaduanScreen extends StatefulWidget {
@@ -75,7 +76,7 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
           // Web platform handling
           // Read file as bytes
           final bytes = await image.readAsBytes();
-          
+
           // Check file size (max 5MB)
           if (bytes.length > 5 * 1024 * 1024) {
             if (mounted) {
@@ -88,7 +89,7 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
             }
             return;
           }
-          
+
           setState(() {
             _selectedImage = image;
             _webImage = bytes;
@@ -96,7 +97,7 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
         } else {
           // Mobile platform handling
           final file = io.File(image.path);
-          
+
           // Cek apakah file benar-benar ada
           if (await file.exists()) {
             // Cek ukuran file (maksimal 5MB)
@@ -112,7 +113,7 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
               }
               return;
             }
-            
+
             setState(() {
               _selectedImage = image;
               _selectedImageFile = file;
@@ -155,13 +156,11 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
       ),
     );
   }
-  
+
   Widget _imageLoadingWidget() {
     return Container(
       color: Colors.grey[200],
-      child: const Center(
-        child: CircularProgressIndicator(),
-      ),
+      child: const Center(child: CircularProgressIndicator()),
     );
   }
 
@@ -221,43 +220,53 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
           print('Has Image: ${_selectedImage != null}');
         }
 
-        final pengaduanProvider = Provider.of<PengaduanProvider>(context, listen: false);
-        
+        final pengaduanProvider = Provider.of<PengaduanProvider>(
+          context,
+          listen: false,
+        );
+
         // Always pass the XFile directly for better handling
         XFile? imageFile = _selectedImage;
-        
+
         if (kDebugMode && imageFile != null) {
-          print('Image Info:');
-          print('- Image name: ${imageFile.name}');
-          print('- Image path: ${imageFile.path}');
-          
+          developer.log('Image Info:');
+          developer.log('- Image name: ${imageFile.name}');
+          developer.log('- Image path: ${imageFile.path}');
+
           if (kIsWeb) {
             final bytes = await imageFile.readAsBytes();
-            print('- Web image bytes size: ${bytes.length} bytes');
+            developer.log('- Web image bytes size: ${bytes.length} bytes');
           } else if (_selectedImageFile != null) {
-            print('- Mobile file exists: ${_selectedImageFile!.existsSync()}');
-            print('- Mobile file size: ${await _selectedImageFile!.length()} bytes');
+            developer.log(
+              '- Mobile file exists: ${_selectedImageFile!.existsSync()}',
+            );
+            developer.log(
+              '- Mobile file size: ${await _selectedImageFile!.length()} bytes',
+            );
           }
         }
-        
+
         if (kDebugMode) {
-          print('Calling createPengaduan on provider...');
+          developer.log(
+            '- Calling createPengaduan on provider: ${await _selectedImageFile!.length()} bytes',
+          );
         }
-        
+
         // Always include nama_instansi as it's required by the API
         String namaInstansi = _namaInstansiController.text.trim();
         if (namaInstansi.isEmpty) {
           // If not provided, use a default value to prevent API validation errors
           namaInstansi = "Default";
         }
-        
+
         final success = await pengaduanProvider.createPengaduan(
           judul: _judulController.text.trim(),
           deskripsi: _deskripsiController.text.trim(),
           kategoriId: _selectedKategoriId!,
-          lokasi: _lokasiController.text.trim().isEmpty 
-              ? null 
-              : _lokasiController.text.trim(),
+          lokasi:
+              _lokasiController.text.trim().isEmpty
+                  ? null
+                  : _lokasiController.text.trim(),
           namaInstansi: namaInstansi,
           imageFile: imageFile,
         );
@@ -278,7 +287,9 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
         } else if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Gagal membuat pengaduan: ${pengaduanProvider.error ?? "Unknown error"}'),
+              content: Text(
+                'Gagal membuat pengaduan: ${pengaduanProvider.error ?? "Unknown error"}',
+              ),
               backgroundColor: Colors.red,
             ),
           );
@@ -286,10 +297,7 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error: $e'),
-              backgroundColor: Colors.red,
-            ),
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
           );
         }
       }
@@ -356,12 +364,13 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
                               prefixIcon: Icon(Icons.category),
                               border: OutlineInputBorder(),
                             ),
-                            items: pengaduanProvider.kategoris.map((kategori) {
-                              return DropdownMenuItem<int>(
-                                value: kategori.id,
-                                child: Text(kategori.nama),
-                              );
-                            }).toList(),
+                            items:
+                                pengaduanProvider.kategoris.map((kategori) {
+                                  return DropdownMenuItem<int>(
+                                    value: kategori.id,
+                                    child: Text(kategori.nama),
+                                  );
+                                }).toList(),
                             onChanged: (value) {
                               setState(() {
                                 _selectedKategoriId = value;
@@ -382,7 +391,8 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
                               labelText: 'Deskripsi Pengaduan *',
                               prefixIcon: Icon(Icons.description),
                               border: OutlineInputBorder(),
-                              hintText: 'Jelaskan detail pengaduan Anda dengan lengkap',
+                              hintText:
+                                  'Jelaskan detail pengaduan Anda dengan lengkap',
                               alignLabelWithHint: true,
                             ),
                             validator: (value) {
@@ -415,7 +425,8 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
                               labelText: 'Nama Instansi *',
                               prefixIcon: Icon(Icons.business),
                               border: OutlineInputBorder(),
-                              hintText: 'Masukkan nama instansi atau perusahaan',
+                              hintText:
+                                  'Masukkan nama instansi atau perusahaan',
                             ),
                             validator: (value) {
                               if (value == null || value.trim().isEmpty) {
@@ -447,41 +458,56 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
                                   ),
                                   child: ClipRRect(
                                     borderRadius: BorderRadius.circular(8),
-                                    child: kIsWeb 
-                                      ? _webImage != null 
-                                        ? Image.memory(
-                                            _webImage!,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (context, error, stackTrace) {
-                                              return _imageErrorWidget();
-                                            },
-                                          )
-                                        : _imageLoadingWidget()
-                                      : _selectedImageFile != null
-                                        ? Image.file(
-                                            _selectedImageFile!,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (context, error, stackTrace) {
-                                              return _imageErrorWidget();
-                                            },
-                                          )
-                                        : FutureBuilder<Uint8List>(
-                                            future: _selectedImage!.readAsBytes(),
-                                            builder: (context, snapshot) {
-                                              if (snapshot.connectionState == ConnectionState.done && 
-                                                  snapshot.data != null) {
-                                                return Image.memory(
-                                                  snapshot.data!,
+                                    child:
+                                        kIsWeb
+                                            ? _webImage != null
+                                                ? Image.memory(
+                                                  _webImage!,
                                                   fit: BoxFit.cover,
-                                                  errorBuilder: (context, error, stackTrace) {
+                                                  errorBuilder: (
+                                                    context,
+                                                    error,
+                                                    stackTrace,
+                                                  ) {
                                                     return _imageErrorWidget();
                                                   },
-                                                );
-                                              } else {
-                                                return _imageLoadingWidget();
-                                              }
-                                            },
-                                          ),
+                                                )
+                                                : _imageLoadingWidget()
+                                            : _selectedImageFile != null
+                                            ? Image.file(
+                                              _selectedImageFile!,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (
+                                                context,
+                                                error,
+                                                stackTrace,
+                                              ) {
+                                                return _imageErrorWidget();
+                                              },
+                                            )
+                                            : FutureBuilder<Uint8List>(
+                                              future:
+                                                  _selectedImage!.readAsBytes(),
+                                              builder: (context, snapshot) {
+                                                if (snapshot.connectionState ==
+                                                        ConnectionState.done &&
+                                                    snapshot.data != null) {
+                                                  return Image.memory(
+                                                    snapshot.data!,
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder: (
+                                                      context,
+                                                      error,
+                                                      stackTrace,
+                                                    ) {
+                                                      return _imageErrorWidget();
+                                                    },
+                                                  );
+                                                } else {
+                                                  return _imageLoadingWidget();
+                                                }
+                                              },
+                                            ),
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -531,7 +557,8 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
                                       color: Colors.grey.shade50,
                                     ),
                                     child: const Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       children: [
                                         Icon(
                                           Icons.add_a_photo,
@@ -594,32 +621,34 @@ class _CreatePengaduanScreenState extends State<CreatePengaduanScreen> {
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton(
-                    onPressed: pengaduanProvider.isLoading ? null : _submitPengaduan,
+                    onPressed:
+                        pengaduanProvider.isLoading ? null : _submitPengaduan,
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       backgroundColor: Colors.blue,
                       foregroundColor: Colors.white,
                     ),
-                    child: pengaduanProvider.isLoading
-                        ? const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
+                    child:
+                        pengaduanProvider.isLoading
+                            ? const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
                                 ),
-                              ),
-                              SizedBox(width: 12),
-                              Text('Menyimpan...'),
-                            ],
-                          )
-                        : const Text(
-                            'Kirim Pengaduan',
-                            style: TextStyle(fontSize: 16),
-                          ),
+                                SizedBox(width: 12),
+                                Text('Menyimpan...'),
+                              ],
+                            )
+                            : const Text(
+                              'Kirim Pengaduan',
+                              style: TextStyle(fontSize: 16),
+                            ),
                   ),
                 ],
               ),

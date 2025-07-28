@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:typed_data';
 import '../models/pengaduan.dart';
 import '../models/kategori.dart';
 import '../services/api_service.dart';
@@ -8,7 +7,7 @@ import '../services/image_upload_service.dart';
 
 class PengaduanProvider extends ChangeNotifier {
   final ApiService _apiService = ApiService();
-  
+
   List<Pengaduan> _pengaduans = [];
   List<Kategori> _kategoris = [];
   Map<String, dynamic>? _statistics;
@@ -26,7 +25,7 @@ class PengaduanProvider extends ChangeNotifier {
   Future<void> loadPengaduans() async {
     // Prevent multiple simultaneous loads
     if (_isLoading) return;
-    
+
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -101,7 +100,9 @@ class PengaduanProvider extends ChangeNotifier {
 
     try {
       if (kDebugMode) {
-        print("createPengaduan called in provider with imageFile: ${imageFile != null}");
+        print(
+          "createPengaduan called in provider with imageFile: ${imageFile != null}",
+        );
       }
 
       // If an XFile was provided, use our specialized ImageUploadService
@@ -109,10 +110,10 @@ class PengaduanProvider extends ChangeNotifier {
         if (kDebugMode) {
           print("Using specialized ImageUploadService");
         }
-        
+
         // Ensure namaInstansi is not null for the service call
         String instansi = namaInstansi ?? '';
-        
+
         await ImageUploadService.uploadPengaduanWithImage(
           judul: judul,
           deskripsi: deskripsi,
@@ -133,7 +134,7 @@ class PengaduanProvider extends ChangeNotifier {
           imageBytes: imageBytes,
         );
       }
-      
+
       await loadPengaduans(); // Refresh the list
       _isLoading = false;
       notifyListeners();
@@ -142,12 +143,12 @@ class PengaduanProvider extends ChangeNotifier {
       _error = e.toString();
       _isLoading = false;
       notifyListeners();
-      
+
       if (kDebugMode) {
         print("Error in createPengaduan provider: $e");
         print("Stack trace: ${StackTrace.current}");
       }
-      
+
       return false;
     }
   }
